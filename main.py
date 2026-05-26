@@ -8,24 +8,22 @@ from google_adapter import call_google_gemini
 
 app = FastAPI(
     title="AlphaPilot International Proxy",
-    description="Production-grade model proxy for Google Gemini / future HF Agents / OpenAI",
-    version="1.0.0",
+    version="1.1.0",
 )
-
 
 @app.get("/")
 def root() -> Dict[str, Any]:
     return {
         "status": "ok",
-        "service": "AlphaPilot International Proxy",
-        "version": "1.0.0",
-        "message": "Render Python 3 runtime is running.",
+        "message": "AlphaPilot Proxy is running. Version 1.1.0",
     }
-
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
-    body = await request.json()
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
 
     model: Optional[str] = body.get("model")
     messages: Optional[List[Dict[str, Any]]] = body.get("messages")
@@ -33,42 +31,40 @@ async def chat_completions(request: Request):
 
     if not model:
         raise HTTPException(status_code=400, detail="`model` is required")
-    if not messages or not isinstance(messages, list):
-        raise HTTPException(status_code=400, detail="`messages` must be a non-empty list")
+    if not messages:
+        raise HTTPException(status_code=400, detail="`messages` is required")
 
-    try:
-        if model.startswith("google/") or model.startswith("gemini-"):
-            api_key = os.getenv("GOOGLE_API_KEY")
-            if not api_key:
-                raise HTTPException(status_code=500, detail="GOOGLE_API_KEY is missing")
-
-            return await call_google_gemini(
-                api_key=api_key,
-                model=model,
-                messages=messages,
-                stream=stream
+    # 只要是 google 路径或者以 gemini 开头的模型，都走 google_adapter
+    if model.startswith("google/") or model.startswith("gemini-"):
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            # 这里返回 500 是因为这是服务器配置问题
+            return JSONResponse(
+                status_code=500,
+                content={"error": {"message": "GOOGLE_API_KEY is not set on the server."}}
             )
 
-        return JSONResponse(
-            status_code=400,
-            content={
-                "error": {
-                    "type": "unsupported_model",
-                    "message": f"Unsupported model: {model}. Expected prefix: 'google/' or bare Gemini model like 'gemini-2.0-pro'."
-                }
-            },
+        # 直接返回 adapter 的结果（无论是 StreamingResponse 还是 dict，FastAPI 都能自动处理）
+        response = await call_google_gemini(
+            api_key=api_key,
+            model=model,
+            messages=messages,
+            stream=stream
         )
+        
+        # 如果 adapter 返回的是字典且包含 error 键，我们可以把状态码调成 400 或 500
+        if isinstance(response, dict) and "error" in response:
+            return JSONResponse(status_code=400, content=response)
+            
+        return response
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": {
-                    "type": "internal_error",
-                    "message": "Internal error in proxy layer.",
-                    "detail": str(e),
-                }
-            },
-        )
+    # 其他模型前缀报错
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": {
+                "message": f"Model '{model}' not found or supported. Use 'gemini-1.5-flash' etc.",
+                "type": "invalid_request_error"
+            }
+        },
+    )

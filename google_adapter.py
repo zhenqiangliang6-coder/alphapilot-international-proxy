@@ -2,7 +2,8 @@ import httpx
 import json
 from fastapi.responses import StreamingResponse
 
-GOOGLE_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+GOOGLE_API_URL = "https://generativelanguage.googleapis.com/v1/models"
+
 
 def normalize_model_name(model: str) -> str:
     """

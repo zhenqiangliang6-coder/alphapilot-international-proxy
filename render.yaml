@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: alphapilot-proxy
+    env: python
+    region: oregon   # 你选择美国，这里用美国区（Oregon）
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port 10000"
+    autoDeploy: true
+
+    envVars:
+      - key: GOOGLE_API_KEY
+        sync: false   # 不把 key 写入文件，只从 Render 控制台读取

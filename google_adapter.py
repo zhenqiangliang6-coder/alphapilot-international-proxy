@@ -12,7 +12,7 @@ def normalize_model_name(model: str) -> str:
         return model.split("google/")[1]
     return model
 
-async def google_chat_completion(api_key: str, model: str, messages: list, stream: bool):
+async def call_google_gemini(api_key: str, model: str, messages: list, stream: bool):
     # 统一模型名
     model = normalize_model_name(model)
 
